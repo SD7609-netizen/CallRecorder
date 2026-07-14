@@ -13,14 +13,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
       - name: Build APK
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.2'
           arguments: assembleDebug
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
