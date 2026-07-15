@@ -8,6 +8,7 @@ class App : Application() {
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "recording_channel"
         const val SAVE_DELETE_CHANNEL_ID = "save_delete_channel"
+        const val PLAYBACK_CHANNEL_ID = "playback_channel"
     }
 
     override fun onCreate() {
@@ -30,6 +31,16 @@ class App : Application() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Запрос на сохранение или удаление записи после звонка"
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(
+                PLAYBACK_CHANNEL_ID,
+                "Воспроизведение записи",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Управление воспроизведением записи звонка"
+                setSound(null, null)
             }
         )
     }

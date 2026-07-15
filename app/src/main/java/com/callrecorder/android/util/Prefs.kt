@@ -29,6 +29,9 @@ object Prefs {
     const val FILTER_CONTACTS_ONLY = 1 // only numbers in phonebook
     const val FILTER_UNKNOWN_ONLY = 2  // only numbers NOT in phonebook
 
+    const val KEY_WHISPER_API_KEY = "whisper_api_key"
+    const val KEY_GROUP_BY_CONTACT = "group_by_contact"
+
     const val SOURCE_AUTO = 0
     const val SOURCE_MIC = 1
     const val SOURCE_VOICE_CALL = 2
@@ -117,4 +120,16 @@ object Prefs {
 
     fun setContactFilter(context: Context, filter: Int) =
         prefs(context).edit().putInt(KEY_CONTACT_FILTER, filter).apply()
+
+    fun getWhisperApiKey(context: Context) =
+        prefs(context).getString(KEY_WHISPER_API_KEY, "") ?: ""
+
+    fun setWhisperApiKey(context: Context, key: String) =
+        prefs(context).edit().putString(KEY_WHISPER_API_KEY, key).apply()
+
+    fun getGroupByContact(context: Context) =
+        prefs(context).getBoolean(KEY_GROUP_BY_CONTACT, false)
+
+    fun setGroupByContact(context: Context, group: Boolean) =
+        prefs(context).edit().putBoolean(KEY_GROUP_BY_CONTACT, group).apply()
 }

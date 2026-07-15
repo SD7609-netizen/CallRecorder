@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
+import android.widget.EditText
 import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -38,6 +40,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadValues() {
         binding.tvContactFilter.text = contactFilterLabels[Prefs.getContactFilter(this)]
         binding.tvOverlayStatus.text = if (Settings.canDrawOverlays(this)) "Разрешено ✓" else "Нажмите для настройки"
+        val key = Prefs.getWhisperApiKey(this)
+        binding.tvWhisperKeyStatus.text = if (key.isBlank()) "Не установлен" else "sk-...${key.takeLast(4)}"
         binding.tvRecordingMode.text = recordingModeLabels[Prefs.getRecordingMode(this)]
         binding.tvAudioSource.text = audioSourceLabels[Prefs.getAudioSourceIndex(this)]
         val chIdx = channelValues.indexOfFirst { it == Prefs.getAudioChannels(this) }.coerceAtLeast(0)
@@ -62,6 +66,30 @@ class SettingsActivity : AppCompatActivity() {
         binding.rowOverlayPerm.setOnClickListener {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                 Uri.parse("package:$packageName")))
+        }
+
+        binding.rowWhisperKey.setOnClickListener {
+            val input = EditText(this).apply {
+                hint = "sk-..."
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                setText(Prefs.getWhisperApiKey(this@SettingsActivity))
+                setPadding(48, 24, 48, 24)
+            }
+            AlertDialog.Builder(this)
+                .setTitle("OpenAI API ключ")
+                .setMessage("Нужен для функции расшифровки через Whisper.\nПолучить: platform.openai.com")
+                .setView(input)
+                .setPositiveButton("Сохранить") { _, _ ->
+                    val key = input.text.toString().trim()
+                    Prefs.setWhisperApiKey(this, key)
+                    binding.tvWhisperKeyStatus.text = if (key.isBlank()) "Не установлен" else "sk-...${key.takeLast(4)}"
+                }
+                .setNeutralButton("Удалить ключ") { _, _ ->
+                    Prefs.setWhisperApiKey(this, "")
+                    binding.tvWhisperKeyStatus.text = "Не установлен"
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
         }
 
         binding.rowRecordingMode.setOnClickListener {

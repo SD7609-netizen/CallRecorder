@@ -12,5 +12,6 @@ data class Recording(
     val dateMillis: Long,
     val durationSeconds: Long,
     val fileSize: Long,
-    val isIncoming: Boolean
+    val isIncoming: Boolean,
+    val transcription: String? = null
 )

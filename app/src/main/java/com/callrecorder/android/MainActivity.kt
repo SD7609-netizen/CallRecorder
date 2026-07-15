@@ -1,23 +1,30 @@
 package com.callrecorder.android
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
-import android.media.MediaPlayer
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.callrecorder.android.data.Recording
 import com.callrecorder.android.databinding.ActivityMainBinding
+import com.callrecorder.android.service.PlaybackService
 import com.callrecorder.android.ui.RecordingAdapter
 import com.callrecorder.android.ui.RecordingsViewModel
 import com.callrecorder.android.util.Prefs
@@ -27,11 +34,17 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val viewModel: RecordingsViewModel by viewModels()
-    private var mediaPlayer: MediaPlayer? = null
+    private lateinit var adapter: RecordingAdapter
 
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* permission granted or denied — recording auto-saves as fallback */ }
+    ) {}
+
+    private val playbackReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            // no-op: notification handles state display
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +60,6 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.title = getString(R.string.app_name)
 
-        // Android 13+: request notification permission so Save/Delete prompt can appear
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -55,7 +67,6 @@ class MainActivity : AppCompatActivity() {
             notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        // Recording toggle
         binding.switchRecording.isChecked = Prefs.isRecordingEnabled(this)
         binding.switchRecording.setOnCheckedChangeListener { _, checked ->
             Prefs.setRecordingEnabled(this, checked)
@@ -64,18 +75,46 @@ class MainActivity : AppCompatActivity() {
         binding.tvRecordingStatus.text =
             if (Prefs.isRecordingEnabled(this)) "Запись активна" else "Запись отключена"
 
-        val adapter = RecordingAdapter(
+        adapter = RecordingAdapter(
             onPlay = { playRecording(it) },
-            onDelete = { confirmDelete(it) }
+            onShare = { shareRecording(it) },
+            onDelete = { confirmDelete(it) },
+            onTranscribe = { handleTranscribe(it) }
         )
         binding.rvRecordings.adapter = adapter
 
-        viewModel.recordings.observe(this) { list ->
-            adapter.submitList(list)
-            binding.tvEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        viewModel.displayItems.observe(this) { items ->
+            adapter.submitList(items)
+            val empty = items.none { it is com.callrecorder.android.ui.RecyclerItem.Item }
+            binding.tvEmpty.visibility = if (empty) View.VISIBLE else View.GONE
+        }
+
+        viewModel.transcriptionState.observe(this) { stateMap ->
+            stateMap.forEach { (id, state) ->
+                when (state) {
+                    is RecordingsViewModel.TranscriptionState.Loading ->
+                        Toast.makeText(this, "Расшифровка...", Toast.LENGTH_SHORT).show()
+                    is RecordingsViewModel.TranscriptionState.Done ->
+                        Toast.makeText(this, "Расшифровка сохранена", Toast.LENGTH_SHORT).show()
+                    is RecordingsViewModel.TranscriptionState.Error -> {
+                        if (state.message == "NO_KEY") promptForApiKey()
+                        else Toast.makeText(this, "Ошибка: ${state.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
         }
 
         viewModel.autoDeleteOld()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        registerReceiver(playbackReceiver, IntentFilter(PlaybackService.BROADCAST_STATE))
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { unregisterReceiver(playbackReceiver) } catch (_: Exception) {}
     }
 
     private fun playRecording(recording: Recording) {
@@ -84,44 +123,75 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Файл не найден", Toast.LENGTH_LONG).show()
             return
         }
+        val displayName = recording.contactName.ifEmpty { recording.phoneNumber.ifEmpty { "Неизвестный" } }
+        startService(Intent(this, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_PLAY
+            putExtra(PlaybackService.EXTRA_FILE_PATH, file.absolutePath)
+            putExtra(PlaybackService.EXTRA_TITLE, displayName)
+        })
+        Toast.makeText(this, "▶ Воспроизведение: $displayName", Toast.LENGTH_SHORT).show()
+    }
 
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = null
+    private fun shareRecording(recording: Recording) {
+        val file = File(recording.filePath)
+        if (!file.exists()) {
+            Toast.makeText(this, "Файл не найден", Toast.LENGTH_LONG).show()
+            return
+        }
+        val uri: Uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val displayName = recording.contactName.ifEmpty { recording.phoneNumber.ifEmpty { "звонок" } }
+        startActivity(Intent.createChooser(
+            Intent(Intent.ACTION_SEND).apply {
+                type = "audio/mp4"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Запись: $displayName")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            },
+            "Поделиться записью"
+        ))
+    }
 
-        try {
-            mediaPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                setDataSource(file.absolutePath)
-                setOnErrorListener { _, what, extra ->
-                    Toast.makeText(this@MainActivity, "Ошибка воспроизведения ($what/$extra)", Toast.LENGTH_LONG).show()
-                    true
-                }
-                setOnCompletionListener {
-                    it.release()
-                    mediaPlayer = null
-                    Toast.makeText(this@MainActivity, "Воспроизведение завершено", Toast.LENGTH_SHORT).show()
-                }
-                prepare()
-                start()
+    private fun handleTranscribe(recording: Recording) {
+        val key = Prefs.getWhisperApiKey(this)
+        if (key.isBlank()) {
+            promptForApiKey { viewModel.transcribe(recording) }
+        } else {
+            if (recording.transcription != null) {
+                AlertDialog.Builder(this)
+                    .setTitle("Расшифровка")
+                    .setMessage(recording.transcription)
+                    .setPositiveButton("Перерасшифровать") { _, _ -> viewModel.transcribe(recording) }
+                    .setNegativeButton("Закрыть", null)
+                    .show()
+            } else {
+                viewModel.transcribe(recording)
             }
-            Toast.makeText(this, "▶ Воспроизведение...", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            mediaPlayer?.release()
-            mediaPlayer = null
-            Toast.makeText(this, "Не удалось воспроизвести: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
+    private fun promptForApiKey(afterSave: (() -> Unit)? = null) {
+        val input = EditText(this).apply {
+            hint = "sk-..."
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setPadding(48, 24, 48, 24)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("OpenAI API ключ")
+            .setMessage("Введите ключ для расшифровки через Whisper API.\nМожно изменить в Настройках.")
+            .setView(input)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val key = input.text.toString().trim()
+                if (key.isNotBlank()) {
+                    Prefs.setWhisperApiKey(this, key)
+                    afterSave?.invoke()
+                }
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
+    }
+
     private fun confirmDelete(recording: Recording) {
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = null
+        stopPlayback()
         AlertDialog.Builder(this)
             .setTitle("Удалить запись?")
             .setMessage("Файл будет удалён безвозвратно")
@@ -130,22 +200,57 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun stopPlayback() {
+        startService(Intent(this, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_STOP_PLAYBACK
+        })
+    }
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
+
+        val searchItem = menu.findItem(R.id.action_search)
+        val searchView = searchItem?.actionView as? SearchView
+        searchView?.apply {
+            queryHint = "Поиск по имени или номеру"
+            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(q: String?) = true
+                override fun onQueryTextChange(q: String?): Boolean {
+                    viewModel.setQuery(q ?: "")
+                    return true
+                }
+            })
+            setOnCloseListener { viewModel.setQuery(""); false }
+        }
+
+        val groupItem = menu.findItem(R.id.action_group)
+        groupItem?.isChecked = viewModel.isGroupByContact()
+
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == R.id.action_settings) {
-            startActivity(Intent(this, SettingsActivity::class.java))
-            return true
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                true
+            }
+            R.id.action_stats -> {
+                startActivity(Intent(this, StatsActivity::class.java))
+                true
+            }
+            R.id.action_group -> {
+                val newState = !item.isChecked
+                item.isChecked = newState
+                viewModel.setGroupByContact(newState)
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
         }
-        return super.onOptionsItemSelected(item)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaPlayer?.release()
-        mediaPlayer = null
+        stopPlayback()
     }
 }

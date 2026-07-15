@@ -1,9 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_search"
+        android:title="Поиск"
+        android:icon="@android:drawable/ic_menu_search"
+        app:showAsAction="ifRoom|collapseActionView"
+        app:actionViewClass="androidx.appcompat.widget.SearchView" />
+
+    <item
+        android:id="@+id/action_stats"
+        android:title="Статистика"
+        android:icon="@drawable/ic_stats"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_group"
+        android:title="По контактам"
+        android:checkable="true"
+        android:checked="false"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/action_settings"
         android:title="Настройки"
         android:icon="@drawable/ic_settings"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
+
 </menu>
