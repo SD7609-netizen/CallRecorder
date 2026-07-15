@@ -1,6 +1,7 @@
 package com.callrecorder.android
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.SeekBar
@@ -13,6 +14,7 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
 
+    private val contactFilterLabels = arrayOf("Все звонки", "Только из контактов", "Только неизвестные")
     private val recordingModeLabels = arrayOf("Все звонки", "Только входящие", "Только исходящие", "Нет")
     private val audioSourceLabels = arrayOf("Авто", "Microphone", "Voice call", "Voice recognition", "Voice communication", "Voice performance")
     private val channelLabels = arrayOf("Stereo", "Mono")
@@ -34,6 +36,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadValues() {
+        binding.tvContactFilter.text = contactFilterLabels[Prefs.getContactFilter(this)]
+        binding.tvOverlayStatus.text = if (Settings.canDrawOverlays(this)) "Разрешено ✓" else "Нажмите для настройки"
         binding.tvRecordingMode.text = recordingModeLabels[Prefs.getRecordingMode(this)]
         binding.tvAudioSource.text = audioSourceLabels[Prefs.getAudioSourceIndex(this)]
         val chIdx = channelValues.indexOfFirst { it == Prefs.getAudioChannels(this) }.coerceAtLeast(0)
@@ -48,6 +52,18 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        binding.rowContactFilter.setOnClickListener {
+            showSingleChoice("Записывать контакты", contactFilterLabels, Prefs.getContactFilter(this)) { i ->
+                Prefs.setContactFilter(this, i)
+                binding.tvContactFilter.text = contactFilterLabels[i]
+            }
+        }
+
+        binding.rowOverlayPerm.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")))
+        }
+
         binding.rowRecordingMode.setOnClickListener {
             showSingleChoice("Режим записи", recordingModeLabels, Prefs.getRecordingMode(this)) { i ->
                 Prefs.setRecordingMode(this, i)

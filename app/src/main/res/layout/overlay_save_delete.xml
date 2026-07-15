@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:orientation="vertical"
+    android:background="@drawable/overlay_bg"
+    android:padding="16dp"
+    android:elevation="12dp">
+
+    <TextView
+        android:id="@+id/tvOverlayTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Входящий · Контакт · 0:00"
+        android:textColor="#FFFFFFFF"
+        android:textSize="14sp"
+        android:fontFamily="sans-serif-medium" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="14dp"
+        android:text="Сохранить запись звонка?"
+        android:textColor="#FF8A8FA8"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOverlayDelete"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="8dp"
+            android:text="Удалить"
+            android:textColor="#FFE05555"
+            app:strokeColor="#FFE05555" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOverlaySave"
+            style="@style/Widget.MaterialComponents.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Сохранить"
+            app:backgroundTint="#FF6A5AE0" />
+
+    </LinearLayout>
+</LinearLayout>

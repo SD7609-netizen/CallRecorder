@@ -2,6 +2,7 @@ package com.callrecorder.android.service
 
 import android.app.*
 import android.content.Intent
+import android.graphics.Color
 import android.media.MediaRecorder
 import android.os.*
 import android.provider.ContactsContract
@@ -34,8 +35,14 @@ class RecorderService : Service() {
     private var startTimeMillis = 0L
     private var phoneNumber = ""
     private var isIncoming = false
+    private var overlayManager: RecordingOverlayManager? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        overlayManager = RecordingOverlayManager(this)
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -111,39 +118,6 @@ class RecorderService : Service() {
 
         val durationSec = (System.currentTimeMillis() - startTimeMillis) / 1000
         val contactName = resolveContactName(phoneNumber)
-
-        if (Prefs.getVibrate(this)) vibrate(200)
-        stopForeground(STOP_FOREGROUND_REMOVE)
-
-        val nm = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= 33 && !nm.areNotificationsEnabled()) {
-            // Android 13+: notification permission not granted — auto-save silently
-            autoSaveRecording(file, durationSec, contactName)
-        } else {
-            showSaveDeleteNotification(file, durationSec, contactName)
-        }
-        stopSelf()
-    }
-
-    private fun autoSaveRecording(file: File, durationSec: Long, contactName: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                AppDatabase.getInstance(this@RecorderService).recordingDao().insert(
-                    Recording(
-                        phoneNumber = phoneNumber,
-                        contactName = contactName,
-                        filePath = file.absolutePath,
-                        dateMillis = startTimeMillis,
-                        durationSeconds = durationSec,
-                        fileSize = file.length(),
-                        isIncoming = isIncoming
-                    )
-                )
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun showSaveDeleteNotification(file: File, durationSec: Long, contactName: String) {
         val displayName = when {
             contactName.isNotEmpty() -> contactName
             phoneNumber.isNotEmpty() -> phoneNumber
@@ -152,6 +126,59 @@ class RecorderService : Service() {
         val direction = if (isIncoming) "Входящий" else "Исходящий"
         val duration = "%d:%02d".format(durationSec / 60, durationSec % 60)
 
+        if (Prefs.getVibrate(this)) vibrate(200)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+
+        val recording = Recording(
+            phoneNumber = phoneNumber,
+            contactName = contactName,
+            filePath = file.absolutePath,
+            dateMillis = startTimeMillis,
+            durationSeconds = durationSec,
+            fileSize = file.length(),
+            isIncoming = isIncoming
+        )
+
+        val nm = getSystemService(NotificationManager::class.java)
+        when {
+            overlayManager?.canShow() == true -> {
+                // Show floating overlay strip — service stays alive until button is tapped
+                overlayManager?.show(
+                    title = "$direction · $displayName · $duration",
+                    onSave = {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            try { AppDatabase.getInstance(this@RecorderService).recordingDao().insert(recording) } catch (_: Exception) {}
+                        }
+                        stopSelf()
+                    },
+                    onDelete = {
+                        file.delete()
+                        stopSelf()
+                    }
+                )
+            }
+            Build.VERSION.SDK_INT >= 33 && !nm.areNotificationsEnabled() -> {
+                // Android 13+ without notification permission — auto-save
+                autoSaveRecording(recording)
+                stopSelf()
+            }
+            else -> {
+                showSaveDeleteNotification(file, durationSec, contactName, displayName, direction, duration)
+                stopSelf()
+            }
+        }
+    }
+
+    private fun autoSaveRecording(recording: Recording) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try { AppDatabase.getInstance(this@RecorderService).recordingDao().insert(recording) } catch (_: Exception) {}
+        }
+    }
+
+    private fun showSaveDeleteNotification(
+        file: File, durationSec: Long, contactName: String,
+        displayName: String, direction: String, duration: String
+    ) {
         fun makeIntent(action: String) = PendingIntent.getBroadcast(
             this,
             action.hashCode(),
@@ -204,7 +231,8 @@ class RecorderService : Service() {
         val direction = if (isIncoming) "Входящий" else "Исходящий"
         val display = phoneNumber.ifEmpty { "неизвестный номер" }
         return NotificationCompat.Builder(this, App.NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification_mic)
+            .setSmallIcon(R.drawable.ic_recording_dot)
+            .setColor(Color.RED)
             .setContentTitle("⏺ Запись звонка")
             .setContentText("$direction: $display")
             .setContentIntent(pi)
@@ -218,8 +246,17 @@ class RecorderService : Service() {
             ?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        overlayManager?.dismiss()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        overlayManager?.dismiss()
+        overlayManager = null
         try { mediaRecorder?.stop() } catch (_: Exception) {}
         try { mediaRecorder?.release() } catch (_: Exception) {}
         mediaRecorder = null

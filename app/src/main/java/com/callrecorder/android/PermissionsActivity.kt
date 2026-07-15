@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.callrecorder.android.databinding.ActivityPermissionsBinding
 import com.callrecorder.android.util.Prefs
+import android.os.Build
 
 class PermissionsActivity : AppCompatActivity() {
 
@@ -38,6 +39,11 @@ class PermissionsActivity : AppCompatActivity() {
         binding.btnGrant.setOnClickListener {
             if (allGranted()) {
                 Prefs.setPermissionsDone(this, true)
+                // Also open overlay settings if not yet granted
+                if (!overlayGranted()) {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")))
+                }
                 goMain()
             } else {
                 permissionLauncher.launch(requiredPermissions)
@@ -45,6 +51,10 @@ class PermissionsActivity : AppCompatActivity() {
                     startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                         data = Uri.parse("package:$packageName")
                     })
+                }
+                if (!overlayGranted()) {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")))
                 }
             }
         }
@@ -62,6 +72,7 @@ class PermissionsActivity : AppCompatActivity() {
         binding.ivPhone.setImageResource(icon(has(Manifest.permission.READ_PHONE_STATE)))
         binding.ivBattery.setImageResource(icon(batteryIgnored()))
         binding.ivAccessibility.setImageResource(icon(accessibilityEnabled()))
+        binding.ivOverlay.setImageResource(icon(overlayGranted()))
         binding.btnGrant.text = if (allGranted()) "Продолжить" else "Предоставить разрешения"
     }
 
@@ -74,6 +85,8 @@ class PermissionsActivity : AppCompatActivity() {
         val pm = getSystemService(PowerManager::class.java)
         return pm.isIgnoringBatteryOptimizations(packageName)
     }
+
+    private fun overlayGranted() = Settings.canDrawOverlays(this)
 
     private fun accessibilityEnabled(): Boolean {
         val v = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)

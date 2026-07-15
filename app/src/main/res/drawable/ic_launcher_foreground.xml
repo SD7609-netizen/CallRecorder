@@ -16,9 +16,9 @@
             android:pathData="M37.86,50.37C42.18,58.86 49.14,65.79 57.63,70.14L64.23,63.54C65.04,62.7 66.24,62.46 67.29,62.82C70.65,63.93 74.28,64.53 78,64.53C79.65,64.53 81,65.88 81,67.53V78C81,79.65 79.65,81 78,81C49.83,81 27,58.17 27,30C27,28.35 28.35,27 30,27H40.5C42.15,27 43.5,28.35 43.5,30C43.5,33.75 44.1,37.35 45.21,40.71C45.54,41.76 45.3,42.93 44.46,43.77L37.86,50.37Z" />
     </group>
 
-    <!-- Red play triangle ▶, shifted 15% towards center from upper-right corner -->
+    <!-- Red play triangle ▶, ~70% size, upper-right area -->
     <path
         android:fillColor="#F44336"
-        android:pathData="M62,22 L86,35 L62,48 Z" />
+        android:pathData="M66,26 L83,35 L66,44 Z" />
 
 </vector>

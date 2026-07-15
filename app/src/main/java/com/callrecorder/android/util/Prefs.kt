@@ -23,6 +23,12 @@ object Prefs {
     const val MODE_OUTGOING = 2
     const val MODE_NONE = 3
 
+    // Contact filter: who to record
+    const val KEY_CONTACT_FILTER = "contact_filter"
+    const val FILTER_ALL = 0           // everyone (default)
+    const val FILTER_CONTACTS_ONLY = 1 // only numbers in phonebook
+    const val FILTER_UNKNOWN_ONLY = 2  // only numbers NOT in phonebook
+
     const val SOURCE_AUTO = 0
     const val SOURCE_MIC = 1
     const val SOURCE_VOICE_CALL = 2
@@ -105,4 +111,10 @@ object Prefs {
 
     fun setVibrate(context: Context, vibrate: Boolean) =
         prefs(context).edit().putBoolean(KEY_VIBRATE, vibrate).apply()
+
+    fun getContactFilter(context: Context) =
+        prefs(context).getInt(KEY_CONTACT_FILTER, FILTER_ALL)
+
+    fun setContactFilter(context: Context, filter: Int) =
+        prefs(context).edit().putInt(KEY_CONTACT_FILTER, filter).apply()
 }
