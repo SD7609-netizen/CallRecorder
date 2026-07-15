@@ -5,19 +5,15 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Phone handset circle background -->
+    <!-- Green phone handset (Material Design call icon, scaled 3x + centered in safe zone) -->
+    <!-- Bounding box: (27,27)-(81,81), centered in 108x108 -->
     <path
-        android:fillColor="#FF6A5AE0"
-        android:pathData="M54,26C38.54,26 26,38.54 26,54s12.54,28 28,28 28,-12.54 28,-28S69.46,26 54,26z" />
+        android:fillColor="#4CAF50"
+        android:pathData="M37.86,50.37C42.18,58.86 49.14,65.79 57.63,70.14L64.23,63.54C65.04,62.7 66.24,62.46 67.29,62.82C70.65,63.93 74.28,64.53 78,64.53C79.65,64.53 81,65.88 81,67.53V78C81,79.65 79.65,81 78,81C49.83,81 27,58.17 27,30C27,28.35 28.35,27 30,27H40.5C42.15,27 43.5,28.35 43.5,30C43.5,33.75 44.1,37.35 45.21,40.71C45.54,41.76 45.3,42.93 44.46,43.77L37.86,50.37Z" />
 
-    <!-- Recording dot (red) -->
+    <!-- White play triangle ▶ centered on the handset -->
     <path
-        android:fillColor="#FFE05555"
-        android:pathData="M54,47m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
-
-    <!-- Phone handset icon -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M44.5,44.5c1.9,-1.9 4.5,-3 7.1,-3s5.2,1.1 7.1,3l2.8,-2.8C58.8,39 56,37.8 53.6,37.5V34h-3.2v3.5C47.6,37.8 44.7,39 42,41.2l2.5,3.3zM63.5,63.5c-1.9,1.9 -4.5,3 -7.1,3s-5.2,-1.1 -7.1,-3l-2.8,2.8c2.7,2.7 6.3,4.2 9.9,4.2s7.2,-1.5 9.9,-4.2l-2.8,-2.8zM40,53.6c0,-2.4 1,-4.6 2.5,-6.3L39.7,44c-2.5,2.5 -4,5.9 -4,9.6s1.5,7.1 4,9.6l2.8,-2.8C41,58.7 40,56.1 40,53.6zM68,53.6c0,2.5 -1,5.1 -2.5,6.8L68.3,63.2c2.5,-2.5 4,-5.9 4,-9.6s-1.5,-7.1 -4,-9.6L65.5,47C67,48.7 68,51.3 68,53.6z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M43,38 L72,54 L43,70 Z" />
 
 </vector>
