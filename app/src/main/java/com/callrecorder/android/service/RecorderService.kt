@@ -9,7 +9,12 @@ import androidx.core.app.NotificationCompat
 import com.callrecorder.android.App
 import com.callrecorder.android.MainActivity
 import com.callrecorder.android.R
+import com.callrecorder.android.data.AppDatabase
+import com.callrecorder.android.data.Recording
 import com.callrecorder.android.util.Prefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -110,8 +115,32 @@ class RecorderService : Service() {
         if (Prefs.getVibrate(this)) vibrate(200)
         stopForeground(STOP_FOREGROUND_REMOVE)
 
-        showSaveDeleteNotification(file, durationSec, contactName)
+        val nm = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 33 && !nm.areNotificationsEnabled()) {
+            // Android 13+: notification permission not granted — auto-save silently
+            autoSaveRecording(file, durationSec, contactName)
+        } else {
+            showSaveDeleteNotification(file, durationSec, contactName)
+        }
         stopSelf()
+    }
+
+    private fun autoSaveRecording(file: File, durationSec: Long, contactName: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                AppDatabase.getInstance(this@RecorderService).recordingDao().insert(
+                    Recording(
+                        phoneNumber = phoneNumber,
+                        contactName = contactName,
+                        filePath = file.absolutePath,
+                        dateMillis = startTimeMillis,
+                        durationSeconds = durationSec,
+                        fileSize = file.length(),
+                        isIncoming = isIncoming
+                    )
+                )
+            } catch (_: Exception) {}
+        }
     }
 
     private fun showSaveDeleteNotification(file: File, durationSec: Long, contactName: String) {
