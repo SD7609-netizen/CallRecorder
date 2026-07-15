@@ -9,10 +9,7 @@ import androidx.core.app.NotificationCompat
 import com.callrecorder.android.App
 import com.callrecorder.android.MainActivity
 import com.callrecorder.android.R
-import com.callrecorder.android.data.AppDatabase
-import com.callrecorder.android.data.Recording
 import com.callrecorder.android.util.Prefs
-import kotlinx.coroutines.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -32,7 +29,6 @@ class RecorderService : Service() {
     private var startTimeMillis = 0L
     private var phoneNumber = ""
     private var isIncoming = false
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -43,13 +39,13 @@ class RecorderService : Service() {
                 isIncoming = intent.getBooleanExtra(EXTRA_IS_INCOMING, true)
                 startRecording()
             }
-            ACTION_STOP -> stopRecordingAndSave()
+            ACTION_STOP -> stopRecordingAndPrompt()
         }
         return START_STICKY
     }
 
     private fun startRecording() {
-        startForeground(NOTIFICATION_ID, buildNotification())
+        startForeground(NOTIFICATION_ID, buildRecordingNotification())
 
         val dir = getExternalFilesDir("Recordings") ?: filesDir
         dir.mkdirs()
@@ -61,13 +57,10 @@ class RecorderService : Service() {
         startTimeMillis = System.currentTimeMillis()
 
         val started = tryStartMediaRecorder(Prefs.resolveAudioSource(this))
-        if (!started) {
-            val fallback = tryStartMediaRecorder(MediaRecorder.AudioSource.MIC)
-            if (!fallback) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return
-            }
+        if (!started && !tryStartMediaRecorder(MediaRecorder.AudioSource.MIC)) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
         }
 
         if (Prefs.getVibrate(this)) vibrate(300)
@@ -76,10 +69,7 @@ class RecorderService : Service() {
     private fun tryStartMediaRecorder(audioSource: Int): Boolean {
         return try {
             val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                MediaRecorder(this)
-            else
-                @Suppress("DEPRECATION") MediaRecorder()
-
+                MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()
             recorder.apply {
                 setAudioSource(audioSource)
                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
@@ -93,22 +83,17 @@ class RecorderService : Service() {
             }
             mediaRecorder = recorder
             true
-        } catch (e: Exception) {
-            false
-        }
+        } catch (_: Exception) { false }
     }
 
-    private fun stopRecordingAndSave() {
+    private fun stopRecordingAndPrompt() {
         val recorder = mediaRecorder
         if (recorder == null) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
-        try {
-            recorder.stop()
-            recorder.release()
-        } catch (_: Exception) {}
+        try { recorder.stop(); recorder.release() } catch (_: Exception) {}
         mediaRecorder = null
 
         val file = outputFile
@@ -122,30 +107,50 @@ class RecorderService : Service() {
         val durationSec = (System.currentTimeMillis() - startTimeMillis) / 1000
         val contactName = resolveContactName(phoneNumber)
 
-        scope.launch {
-            try {
-                AppDatabase.getInstance(this@RecorderService).recordingDao().insert(
-                    Recording(
-                        phoneNumber = phoneNumber,
-                        contactName = contactName,
-                        filePath = file.absolutePath,
-                        dateMillis = startTimeMillis,
-                        durationSeconds = durationSec,
-                        fileSize = file.length(),
-                        isIncoming = isIncoming
-                    )
-                )
-            } catch (_: Exception) {}
-        }
-
         if (Prefs.getVibrate(this)) vibrate(200)
         stopForeground(STOP_FOREGROUND_REMOVE)
+
+        showSaveDeleteNotification(file, durationSec, contactName)
         stopSelf()
     }
 
-    private fun vibrate(ms: Long) {
-        val v = getSystemService(Vibrator::class.java)
-        v?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+    private fun showSaveDeleteNotification(file: File, durationSec: Long, contactName: String) {
+        val displayName = when {
+            contactName.isNotEmpty() -> contactName
+            phoneNumber.isNotEmpty() -> phoneNumber
+            else -> "Неизвестный"
+        }
+        val direction = if (isIncoming) "Входящий" else "Исходящий"
+        val duration = "%d:%02d".format(durationSec / 60, durationSec % 60)
+
+        fun makeIntent(action: String) = PendingIntent.getBroadcast(
+            this,
+            action.hashCode(),
+            Intent(this, SaveDeleteReceiver::class.java).apply {
+                this.action = action
+                putExtra(SaveDeleteReceiver.EXTRA_FILE_PATH, file.absolutePath)
+                putExtra(SaveDeleteReceiver.EXTRA_PHONE_NUMBER, phoneNumber)
+                putExtra(SaveDeleteReceiver.EXTRA_CONTACT_NAME, contactName)
+                putExtra(SaveDeleteReceiver.EXTRA_DATE_MILLIS, startTimeMillis)
+                putExtra(SaveDeleteReceiver.EXTRA_DURATION_SEC, durationSec)
+                putExtra(SaveDeleteReceiver.EXTRA_FILE_SIZE, file.length())
+                putExtra(SaveDeleteReceiver.EXTRA_IS_INCOMING, isIncoming)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, App.SAVE_DELETE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_mic)
+            .setContentTitle("$direction · $displayName · $duration")
+            .setContentText("Сохранить запись звонка?")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(false)
+            .addAction(0, "✓ Сохранить", makeIntent(SaveDeleteReceiver.ACTION_SAVE))
+            .addAction(0, "✕ Удалить", makeIntent(SaveDeleteReceiver.ACTION_DELETE))
+            .build()
+
+        getSystemService(NotificationManager::class.java)
+            .notify(SaveDeleteReceiver.NOTIFICATION_ID, notification)
     }
 
     private fun resolveContactName(number: String): String {
@@ -163,17 +168,15 @@ class RecorderService : Service() {
         } catch (_: Exception) { "" }
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildRecordingNotification(): Notification {
         val pi = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
         )
         val direction = if (isIncoming) "Входящий" else "Исходящий"
         val display = phoneNumber.ifEmpty { "неизвестный номер" }
         return NotificationCompat.Builder(this, App.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_mic)
-            .setContentTitle("Запись звонка")
+            .setContentTitle("⏺ Запись звонка")
             .setContentText("$direction: $display")
             .setContentIntent(pi)
             .setOngoing(true)
@@ -181,9 +184,13 @@ class RecorderService : Service() {
             .build()
     }
 
+    private fun vibrate(ms: Long) {
+        getSystemService(Vibrator::class.java)
+            ?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        scope.cancel()
         try { mediaRecorder?.stop() } catch (_: Exception) {}
         try { mediaRecorder?.release() } catch (_: Exception) {}
         mediaRecorder = null

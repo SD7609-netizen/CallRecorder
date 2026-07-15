@@ -8,6 +8,7 @@ object Prefs {
     private const val PREFS_NAME = "call_recorder_prefs"
 
     const val KEY_PERMISSIONS_DONE = "permissions_done"
+    const val KEY_RECORDING_ENABLED = "recording_enabled"
     const val KEY_RECORDING_MODE = "recording_mode"
     const val KEY_AUDIO_SOURCE = "audio_source"
     const val KEY_AUDIO_CHANNEL = "audio_channel"
@@ -31,6 +32,12 @@ object Prefs {
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun isRecordingEnabled(context: Context) =
+        prefs(context).getBoolean(KEY_RECORDING_ENABLED, true)
+
+    fun setRecordingEnabled(context: Context, enabled: Boolean) =
+        prefs(context).edit().putBoolean(KEY_RECORDING_ENABLED, enabled).apply()
 
     fun isPermissionsDone(context: Context) =
         prefs(context).getBoolean(KEY_PERMISSIONS_DONE, false)

@@ -44,6 +44,15 @@
         </receiver>
 
         <receiver
+            android:name=".service.SaveDeleteReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.callrecorder.SAVE_RECORDING" />
+                <action android:name="com.callrecorder.DELETE_RECORDING" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".service.BootReceiver"
             android:exported="true">
             <intent-filter>

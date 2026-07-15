@@ -14,6 +14,7 @@ class CallReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (!Prefs.isRecordingEnabled(context)) return
         if (Prefs.getRecordingMode(context) == Prefs.MODE_NONE) return
 
         when (intent.action) {

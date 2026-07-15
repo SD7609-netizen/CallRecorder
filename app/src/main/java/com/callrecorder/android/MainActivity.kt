@@ -1,6 +1,7 @@
 package com.callrecorder.android
 
 import android.content.Intent
+import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.os.Bundle
 import android.view.Menu
@@ -37,6 +38,15 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.title = getString(R.string.app_name)
 
+        // Recording toggle
+        binding.switchRecording.isChecked = Prefs.isRecordingEnabled(this)
+        binding.switchRecording.setOnCheckedChangeListener { _, checked ->
+            Prefs.setRecordingEnabled(this, checked)
+            binding.tvRecordingStatus.text = if (checked) "Запись активна" else "Запись отключена"
+        }
+        binding.tvRecordingStatus.text =
+            if (Prefs.isRecordingEnabled(this)) "Запись активна" else "Запись отключена"
+
         val adapter = RecordingAdapter(
             onPlay = { playRecording(it) },
             onDelete = { confirmDelete(it) }
@@ -54,27 +64,51 @@ class MainActivity : AppCompatActivity() {
     private fun playRecording(recording: Recording) {
         val file = File(recording.filePath)
         if (!file.exists()) {
-            Toast.makeText(this, "Файл не найден", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Файл не найден", Toast.LENGTH_LONG).show()
             return
         }
+
+        mediaPlayer?.stop()
         mediaPlayer?.release()
-        mediaPlayer = MediaPlayer().apply {
-            setDataSource(recording.filePath)
-            prepare()
-            start()
-            setOnCompletionListener { it.release(); mediaPlayer = null }
+        mediaPlayer = null
+
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                setDataSource(file.absolutePath)
+                setOnErrorListener { _, what, extra ->
+                    Toast.makeText(this@MainActivity, "Ошибка воспроизведения ($what/$extra)", Toast.LENGTH_LONG).show()
+                    true
+                }
+                setOnCompletionListener {
+                    it.release()
+                    mediaPlayer = null
+                    Toast.makeText(this@MainActivity, "Воспроизведение завершено", Toast.LENGTH_SHORT).show()
+                }
+                prepare()
+                start()
+            }
+            Toast.makeText(this, "▶ Воспроизведение...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            mediaPlayer?.release()
+            mediaPlayer = null
+            Toast.makeText(this, "Не удалось воспроизвести: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
     private fun confirmDelete(recording: Recording) {
+        mediaPlayer?.stop()
+        mediaPlayer?.release()
+        mediaPlayer = null
         AlertDialog.Builder(this)
             .setTitle("Удалить запись?")
             .setMessage("Файл будет удалён безвозвратно")
-            .setPositiveButton("Удалить") { _, _ ->
-                mediaPlayer?.release()
-                mediaPlayer = null
-                viewModel.delete(recording)
-            }
+            .setPositiveButton("Удалить") { _, _ -> viewModel.delete(recording) }
             .setNegativeButton("Отмена", null)
             .show()
     }
