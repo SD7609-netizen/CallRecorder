@@ -1,24 +1,74 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Green phone handset, scaled down 80% from center -->
-    <group
-        android:pivotX="54"
-        android:pivotY="54"
-        android:scaleX="0.80"
-        android:scaleY="0.80">
-        <path
-            android:fillColor="#4CAF50"
-            android:pathData="M37.86,50.37C42.18,58.86 49.14,65.79 57.63,70.14L64.23,63.54C65.04,62.7 66.24,62.46 67.29,62.82C70.65,63.93 74.28,64.53 78,64.53C79.65,64.53 81,65.88 81,67.53V78C81,79.65 79.65,81 78,81C49.83,81 27,58.17 27,30C27,28.35 28.35,27 30,27H40.5C42.15,27 43.5,28.35 43.5,30C43.5,33.75 44.1,37.35 45.21,40.71C45.54,41.76 45.3,42.93 44.46,43.77L37.86,50.37Z" />
-    </group>
+    <!-- === 3D BUTTON BODY === -->
 
-    <!-- Red play triangle ▶, ~70% size, upper-right area -->
+    <!-- Drop shadow (slightly larger rect, shifted down-right) -->
     <path
-        android:fillColor="#F44336"
-        android:pathData="M66,26 L83,35 L66,44 Z" />
+        android:fillColor="#55000020"
+        android:pathData="M39,27 L71,27 A15,15 0 0,1 86,42 L86,73 A15,15 0 0,1 71,88 L39,88 A15,15 0 0,1 24,73 L24,42 A15,15 0 0,1 39,27 Z" />
+
+    <!-- Button base: top-light to bottom-dark blue gradient -->
+    <path android:pathData="M37,24 L71,24 A15,15 0 0,1 86,39 L86,71 A15,15 0 0,1 71,86 L37,86 A15,15 0 0,1 22,71 L22,39 A15,15 0 0,1 37,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="24"
+                android:endX="54" android:endY="86"
+                android:startColor="#76C4FF"
+                android:endColor="#0D46C8" />
+        </aapt:attr>
+    </path>
+
+    <!-- Diagonal highlight sweep: top-left is brightest -->
+    <path android:pathData="M37,24 L71,24 A15,15 0 0,1 86,39 L68,55 L22,55 L22,39 A15,15 0 0,1 37,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="22" android:startY="24"
+                android:endX="86" android:endY="55"
+                android:startColor="#45FFFFFF"
+                android:endColor="#00FFFFFF" />
+        </aapt:attr>
+    </path>
+
+    <!-- Top-edge specular line (gloss) -->
+    <path
+        android:fillColor="#28FFFFFF"
+        android:pathData="M37,24 L71,24 A15,15 0 0,1 86,39 L86,46 L22,46 L22,39 A15,15 0 0,1 37,24 Z" />
+
+    <!-- Bottom inner shadow (depth illusion) -->
+    <path
+        android:fillColor="#2A001650"
+        android:pathData="M22,68 L22,71 A15,15 0 0,0 37,86 L71,86 A15,15 0 0,0 86,71 L86,68 Z" />
+
+    <!-- === PHONE HANDSET (3D) === -->
+
+    <!-- Shadow (dark, offset +2,+2 from main) -->
+    <path
+        android:fillColor="#4A001540"
+        android:pathData="M39.86,52.37C44.18,60.86 51.14,67.79 59.63,72.14L66.23,65.54C67.04,64.7 68.24,64.46 69.29,64.82C72.65,65.93 76.28,66.53 80,66.53C81.65,66.53 83,67.88 83,69.53V80C83,81.65 81.65,83 80,83C51.83,83 29,60.17 29,32C29,30.35 30.35,29 32,29H42.5C44.15,29 45.5,30.35 45.5,32C45.5,35.75 46.1,39.35 47.21,42.71C47.54,43.76 47.3,44.93 46.46,45.77L39.86,52.37Z" />
+
+    <!-- Phone body: white-to-pale-blue gradient (upper lit, lower shaded) -->
+    <path android:pathData="M37.86,50.37C42.18,58.86 49.14,65.79 57.63,70.14L64.23,63.54C65.04,62.7 66.24,62.46 67.29,62.82C70.65,63.93 74.28,64.53 78,64.53C79.65,64.53 81,65.88 81,67.53V78C81,79.65 79.65,81 78,81C49.83,81 27,58.17 27,30C27,28.35 28.35,27 30,27H40.5C42.15,27 43.5,28.35 43.5,30C43.5,33.75 44.1,37.35 45.21,40.71C45.54,41.76 45.3,42.93 44.46,43.77L37.86,50.37Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="27" android:startY="27"
+                android:endX="81" android:endY="83"
+                android:startColor="#FFFFFF"
+                android:endColor="#BACED8" />
+        </aapt:attr>
+    </path>
+
+    <!-- Phone top-left specular highlight (glossy face) -->
+    <path
+        android:fillColor="#65FFFFFF"
+        android:pathData="M37.86,50.37L44.46,43.77C45.3,42.93 45.54,41.76 45.21,40.71C44.1,37.35 43.5,33.75 43.5,30C43.5,28.35 42.15,27 40.5,27H30C28.35,27 27,28.35 27,30C27,37 30,44 35,50Z" />
 
 </vector>
