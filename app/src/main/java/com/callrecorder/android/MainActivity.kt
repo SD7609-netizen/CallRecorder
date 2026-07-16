@@ -124,11 +124,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val displayName = recording.contactName.ifEmpty { recording.phoneNumber.ifEmpty { "Неизвестный" } }
-        startService(Intent(this, PlaybackService::class.java).apply {
+        val playIntent = Intent(this, PlaybackService::class.java).apply {
             action = PlaybackService.ACTION_PLAY
             putExtra(PlaybackService.EXTRA_FILE_PATH, file.absolutePath)
             putExtra(PlaybackService.EXTRA_TITLE, displayName)
-        })
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(playIntent)
+        } else {
+            startService(playIntent)
+        }
         Toast.makeText(this, "▶ Воспроизведение: $displayName", Toast.LENGTH_SHORT).show()
     }
 

@@ -117,10 +117,13 @@ class RecorderService : Service() {
         }
 
         val durationSec = (System.currentTimeMillis() - startTimeMillis) / 1000
-        val contactName = resolveContactName(phoneNumber)
+        // On Android 10+, EXTRA_INCOMING_NUMBER is often empty even with
+        // READ_CALL_LOG. Fall back to reading the most recent CallLog entry.
+        val resolvedNumber = phoneNumber.ifBlank { resolveNumberFromCallLog() }
+        val contactName = resolveContactName(resolvedNumber)
         val displayName = when {
             contactName.isNotEmpty() -> contactName
-            phoneNumber.isNotEmpty() -> phoneNumber
+            resolvedNumber.isNotEmpty() -> resolvedNumber
             else -> "Неизвестный"
         }
         val direction = if (isIncoming) "Входящий" else "Исходящий"
@@ -130,7 +133,7 @@ class RecorderService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
 
         val recording = Recording(
-            phoneNumber = phoneNumber,
+            phoneNumber = resolvedNumber,
             contactName = contactName,
             filePath = file.absolutePath,
             dateMillis = startTimeMillis,
@@ -209,6 +212,19 @@ class RecorderService : Service() {
             .notify(SaveDeleteReceiver.NOTIFICATION_ID, notification)
     }
 
+    private fun resolveNumberFromCallLog(): String {
+        return try {
+            contentResolver.query(
+                android.provider.CallLog.Calls.CONTENT_URI,
+                arrayOf(android.provider.CallLog.Calls.NUMBER),
+                null, null,
+                "${android.provider.CallLog.Calls.DATE} DESC"
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) ?: "" else ""
+            } ?: ""
+        } catch (_: Exception) { "" }
+    }
+
     private fun resolveContactName(number: String): String {
         if (number.isBlank()) return ""
         return try {
@@ -230,14 +246,21 @@ class RecorderService : Service() {
         )
         val direction = if (isIncoming) "Входящий" else "Исходящий"
         val display = phoneNumber.ifEmpty { "неизвестный номер" }
+        // PRIORITY_DEFAULT keeps the icon visible in the status bar for the
+        // full duration of the call (PRIORITY_LOW collapses on many devices).
+        // setColorized(true)+setColor(RED) gives a red background in the shade;
+        // the status bar icon itself is always white — Android system limitation.
         return NotificationCompat.Builder(this, App.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_recording_dot)
             .setColor(Color.RED)
+            .setColorized(true)
             .setContentTitle("⏺ Запись звонка")
             .setContentText("$direction: $display")
             .setContentIntent(pi)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 

@@ -46,6 +46,10 @@ class PlaybackService : Service() {
                 val path = intent.getStringExtra(EXTRA_FILE_PATH) ?: return START_NOT_STICKY
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: "Запись"
                 currentTitle = title
+                // Become a foreground service FIRST — required on Android 12+
+                // before any MediaPlayer work, so the startForeground() call
+                // is never inside the MediaPlayer try-catch.
+                showNotification(playing = false)
                 startPlayback(path)
             }
             ACTION_PAUSE_RESUME -> togglePause()
@@ -79,9 +83,10 @@ class PlaybackService : Service() {
                 prepare()
                 start()
             }
-            showNotification(playing = true)
+            showNotification(playing = true)  // update notification to "playing" state
             broadcastState(true)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
