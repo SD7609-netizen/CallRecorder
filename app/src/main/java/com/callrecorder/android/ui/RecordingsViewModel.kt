@@ -72,6 +72,25 @@ class RecordingsViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /**
+     * Deletes .m4a files on disk that have no matching DB entry.
+     * These accumulate when RecorderService is killed before the user taps
+     * Save/Delete (the overlay or notification path never completes).
+     */
+    fun cleanOrphanFiles() = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            val app = getApplication<Application>()
+            val dir = app.getExternalFilesDir("Recordings") ?: return@launch
+            if (!dir.exists()) return@launch
+            val knownPaths = dao.getAllSync().map { it.filePath }.toSet()
+            dir.listFiles()?.forEach { file ->
+                if (file.extension == "m4a" && file.absolutePath !in knownPaths) {
+                    file.delete()
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     fun transcribe(recording: Recording) = viewModelScope.launch {
         val apiKey = Prefs.getWhisperApiKey(getApplication())
         if (apiKey.isBlank()) {

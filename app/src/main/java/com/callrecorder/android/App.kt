@@ -18,10 +18,15 @@ class App : Application() {
             NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "Запись звонка",
-                NotificationManager.IMPORTANCE_LOW
+                // IMPORTANCE_DEFAULT keeps the status bar icon visible throughout
+                // the call. Sound is suppressed via setSound(null,null) — the user
+                // won't hear anything, but the icon stays in the status bar.
+                // IMPORTANCE_LOW hides the icon on many devices (Android 8+).
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Отображается во время записи звонка"
                 setSound(null, null)
+                enableVibration(false)
             }
         )
         nm.createNotificationChannel(

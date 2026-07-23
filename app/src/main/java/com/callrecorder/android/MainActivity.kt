@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.autoDeleteOld()
+        viewModel.cleanOrphanFiles()
     }
 
     override fun onResume() {

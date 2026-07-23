@@ -28,6 +28,9 @@ class RecorderService : Service() {
         const val EXTRA_PHONE_NUMBER = "phone_number"
         const val EXTRA_IS_INCOMING = "is_incoming"
         const val NOTIFICATION_ID = 1001
+
+        // How long to keep the overlay visible before falling back to notification
+        private const val OVERLAY_TIMEOUT_MS = 30_000L
     }
 
     private var mediaRecorder: MediaRecorder? = null
@@ -36,6 +39,12 @@ class RecorderService : Service() {
     private var phoneNumber = ""
     private var isIncoming = false
     private var overlayManager: RecordingOverlayManager? = null
+
+    // Pending-choice state: held while the save/delete overlay is visible
+    private var pendingFile: File? = null
+    private var pendingRecording: Recording? = null
+    private var recordingHandled = false
+    private val pendingHandler = Handler(Looper.getMainLooper())
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -130,7 +139,6 @@ class RecorderService : Service() {
         val duration = "%d:%02d".format(durationSec / 60, durationSec % 60)
 
         if (Prefs.getVibrate(this)) vibrate(200)
-        stopForeground(STOP_FOREGROUND_REMOVE)
 
         val recording = Recording(
             phoneNumber = resolvedNumber,
@@ -142,34 +150,77 @@ class RecorderService : Service() {
             isIncoming = isIncoming
         )
 
+        // Keep refs so onDestroy() can auto-save if service is killed unexpectedly
+        pendingFile = file
+        pendingRecording = recording
+        recordingHandled = false
+
         val nm = getSystemService(NotificationManager::class.java)
         when {
-            overlayManager?.canShow() == true -> {
-                // Show floating overlay strip — service stays alive until button is tapped
-                overlayManager?.show(
-                    title = "$direction · $displayName · $duration",
-                    onSave = {
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try { AppDatabase.getInstance(this@RecorderService).recordingDao().insert(recording) } catch (_: Exception) {}
-                        }
-                        stopSelf()
-                    },
-                    onDelete = {
-                        file.delete()
-                        stopSelf()
-                    }
-                )
-            }
+            overlayManager?.canShow() == true -> showOverlayWithForeground(
+                file, recording, displayName, direction, duration, durationSec, contactName
+            )
             Build.VERSION.SDK_INT >= 33 && !nm.areNotificationsEnabled() -> {
-                // Android 13+ without notification permission — auto-save
                 autoSaveRecording(recording)
+                recordingHandled = true
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
             else -> {
                 showSaveDeleteNotification(file, durationSec, contactName, displayName, direction, duration)
+                recordingHandled = true
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
+    }
+
+    /**
+     * Shows the floating overlay while keeping the service as a foreground service
+     * so Android doesn't kill it before the user taps a button.
+     * After OVERLAY_TIMEOUT_MS the overlay auto-dismisses and falls back to a
+     * persistent notification with Save / Delete buttons.
+     */
+    private fun showOverlayWithForeground(
+        file: File, recording: Recording,
+        displayName: String, direction: String, duration: String,
+        durationSec: Long, contactName: String
+    ) {
+        // Stay foreground with a silent "pending choice" notification.
+        // This prevents Android from killing the service and dismissing the overlay.
+        startForeground(NOTIFICATION_ID, buildPendingChoiceNotification(displayName, direction, duration))
+
+        overlayManager?.show(
+            title = "$direction · $displayName · $duration",
+            onSave = {
+                recordingHandled = true
+                pendingHandler.removeCallbacksAndMessages(null)
+                CoroutineScope(Dispatchers.IO).launch {
+                    try { AppDatabase.getInstance(this@RecorderService).recordingDao().insert(recording) } catch (_: Exception) {}
+                }
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            },
+            onDelete = {
+                recordingHandled = true
+                pendingHandler.removeCallbacksAndMessages(null)
+                file.delete()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        )
+
+        // Auto-dismiss after timeout → fall back to notification so the user
+        // can still make a choice even if they missed the overlay.
+        pendingHandler.postDelayed({
+            if (!recordingHandled) {
+                overlayManager?.dismiss()
+                showSaveDeleteNotification(file, durationSec, contactName, displayName, direction, duration)
+                recordingHandled = true
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }, OVERLAY_TIMEOUT_MS)
     }
 
     private fun autoSaveRecording(recording: Recording) {
@@ -264,22 +315,49 @@ class RecorderService : Service() {
             .build()
     }
 
+    private fun buildPendingChoiceNotification(
+        displayName: String, direction: String, duration: String
+    ): Notification {
+        return NotificationCompat.Builder(this, App.NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_mic)
+            .setContentTitle("$direction · $displayName · $duration")
+            .setContentText("Выберите: сохранить или удалить запись")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
     private fun vibrate(ms: Long) {
         getSystemService(Vibrator::class.java)
             ?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        overlayManager?.dismiss()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        pendingHandler.removeCallbacksAndMessages(null)
+        // onDestroy() will auto-save if recordingHandled == false
         stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        pendingHandler.removeCallbacksAndMessages(null)
         overlayManager?.dismiss()
         overlayManager = null
+
+        // Service was killed while overlay was visible (memory pressure, user force-stopped, etc.)
+        // Auto-save the recording so no calls are lost.
+        if (!recordingHandled) {
+            val rec = pendingRecording
+            val file = pendingFile
+            if (rec != null && file != null && file.exists()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    try { AppDatabase.getInstance(this@RecorderService).recordingDao().insert(rec) } catch (_: Exception) {}
+                }
+            }
+        }
+
         try { mediaRecorder?.stop() } catch (_: Exception) {}
         try { mediaRecorder?.release() } catch (_: Exception) {}
         mediaRecorder = null
